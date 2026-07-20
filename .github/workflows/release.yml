@@ -18,7 +18,19 @@ jobs:
         run: build.bat
       - name: Create release archive
         shell: powershell
-        run: Compress-Archive -Path build\* -DestinationPath ImageConverter-Windows-x64.zip
+        run: |
+          Compress-Archive -Path build\* -DestinationPath ImageConverter-Windows-x64.zip
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $archive = [System.IO.Compression.ZipFile]::Open("ImageConverter-Windows-x64.zip", "Update")
+          try {
+            foreach ($folder in @("Input/", "Output/")) {
+              if ($null -eq $archive.GetEntry($folder)) {
+                $archive.CreateEntry($folder) | Out-Null
+              }
+            }
+          } finally {
+            $archive.Dispose()
+          }
       - name: Publish GitHub release
         shell: powershell
         env:

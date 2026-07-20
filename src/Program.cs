@@ -22,8 +22,8 @@ using Windows.Storage.Streams;
 [assembly: AssemblyCompany("StriK3FoRC3")]
 [assembly: AssemblyProduct("Image Converter")]
 [assembly: AssemblyCopyright("Copyright (c) 2026 StriK3FoRC3")]
-[assembly: AssemblyVersion("1.0.0.0")]
-[assembly: AssemblyFileVersion("1.0.0.0")]
+[assembly: AssemblyVersion("1.0.1.0")]
+[assembly: AssemblyFileVersion("1.0.1.0")]
 
 namespace ImageConverterUtility
 {
@@ -53,7 +53,7 @@ namespace ImageConverterUtility
         private static readonly Color ColorTab = Color.FromArgb(43, 43, 43);
         private static readonly Color ColorText = Color.FromArgb(245, 245, 245);
         private static readonly Color ColorMuted = Color.FromArgb(180, 180, 180);
-        private static readonly Color ColorAccent = Color.FromArgb(156, 99, 255);
+        private static readonly Color ColorAccent = Color.FromArgb(159, 0, 255);
         private static readonly Color ColorBlue = Color.FromArgb(82, 139, 255);
         private static readonly Color ColorGreen = Color.FromArgb(76, 175, 80);
         private static readonly Color ColorRed = Color.FromArgb(244, 67, 54);
@@ -495,8 +495,12 @@ namespace ImageConverterUtility
                 dialog.Shown += delegate
                 {
                     int dark = 1;
+                    int caption = ColorTranslator.ToWin32(ColorBg);
+                    int captionText = ColorTranslator.ToWin32(ColorText);
                     DwmSetWindowAttribute(dialog.Handle, 20, ref dark, sizeof(int));
                     DwmSetWindowAttribute(dialog.Handle, 19, ref dark, sizeof(int));
+                    DwmSetWindowAttribute(dialog.Handle, 35, ref caption, sizeof(int));
+                    DwmSetWindowAttribute(dialog.Handle, 36, ref captionText, sizeof(int));
                     list.SelectionStart = 0;
                     list.SelectionLength = 0;
                     ok.Focus();
@@ -1276,8 +1280,12 @@ namespace ImageConverterUtility
         {
             if (!IsHandleCreated) return;
             int dark = 1;
+            int caption = ColorTranslator.ToWin32(ColorBg);
+            int captionText = ColorTranslator.ToWin32(ColorText);
             DwmSetWindowAttribute(Handle, 20, ref dark, sizeof(int));
             DwmSetWindowAttribute(Handle, 19, ref dark, sizeof(int));
+            DwmSetWindowAttribute(Handle, 35, ref caption, sizeof(int));
+            DwmSetWindowAttribute(Handle, 36, ref captionText, sizeof(int));
         }
 
         [DllImport("dwmapi.dll")]
