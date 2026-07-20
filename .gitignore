@@ -1,0 +1,25 @@
+# Generated build and release files
+/build/
+/release/
+*.zip
+
+# Restored dependencies
+/packages/
+
+# Local application data
+/Input/
+/Output/
+last_format.txt
+
+# Visual Studio and editor files
+/.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.pdb
+*.obj
+
+# Windows files
+Thumbs.db
+Desktop.ini
