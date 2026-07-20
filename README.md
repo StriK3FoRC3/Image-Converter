@@ -78,6 +78,6 @@ Bug reports, feature ideas, and noncommercial contributions are welcome. See [CO
 
 ## License
 
-Image Converter is available under the [PolyForm Noncommercial License 1.0.0](LICENSE), matching Pr0mt_X Text. You may use, modify, and distribute it for permitted noncommercial purposes. Commercial use is not granted by this license.
+Image Converter is available under the [PolyForm Noncommercial License 1.0.0](LICENSE) You may use, modify, and distribute it for permitted noncommercial purposes. Commercial use is not granted by this license.
 
 Third-party components retain their own licenses. See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md); complete dependency notices are included with every build.
