@@ -2,6 +2,12 @@
 
 Image Converter is a compact Windows utility for batch-converting images, PDFs, and videos. It runs as a portable app, keeps its `Input` and `Output` folders beside the executable, and does not require FFmpeg, ImageMagick, or another converter to be installed.
 
+
+⚠️Disclaimer⚠️: This app was created with the help of ChatGPT/Codex. If you don't like vibe coded programs, don't use it. Please report any bugs you find, and feel free to suggest new features.
+I created this portable program so I can quickly convert any image or video to whatever file type I need. Yes, there are already many tools like this, but I wanted to make one my own way.
+
+
+
 ## Features
 
 - Convert every supported file in the `Input` folder as one batch
