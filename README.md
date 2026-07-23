@@ -1,3 +1,7 @@
+<div align="center">
+    <img src="/app-screenshot1.png" width="400px"</img> 
+</div>
+
 # Image Converter
 
 Image Converter is a compact Windows utility for batch-converting images, PDFs, and videos. It runs as a portable app, keeps its `Input` and `Output` folders beside the executable, and does not require FFmpeg, ImageMagick, or another converter to be installed.
