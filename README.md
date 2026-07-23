@@ -1,5 +1,5 @@
 <div align="center">
-    <img src="/app-screenshot1.png" width="500px"</img> 
+    <img src="/app-screenshot1.png" width="600px"</img> 
 </div>
 
 # Image Converter
