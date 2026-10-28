@@ -1,13 +1,18 @@
+
+# Image Converter
 <div align="center">
     <img src="/app-screenshot1.png" width="600px"</img> 
 </div>
 
-# Image Converter
-
+⚠️Disclaimer⚠️: This app was created with the help of ChatGPT/Codex. 
+If you don't like vibe coded programs, don't use it. Please report any bugs you find, and feel free to suggest new features.
+<br/>
+<br/>
+<br/>
 Image Converter is a compact Windows utility for batch-converting images, PDFs, and videos. It runs as a portable app, keeps its `Input` and `Output` folders beside the executable, and does not require FFmpeg, ImageMagick, or another converter to be installed.
 
 
-⚠️Disclaimer⚠️: This app was created with the help of ChatGPT/Codex. If you don't like vibe coded programs, don't use it. Please report any bugs you find, and feel free to suggest new features.
+âš ï¸Disclaimerâš ï¸: This app was created with the help of ChatGPT/Codex. If you don't like vibe coded programs, don't use it. Please report any bugs you find, and feel free to suggest new features.
 I created this portable program so I can quickly convert any image or video to whatever file type I need. Yes, there are already many tools like this, but I wanted to make one my own way.
 
 
@@ -15,7 +20,7 @@ I created this portable program so I can quickly convert any image or video to w
 ## Features
 
 - Modern dark interface inspired by YTDownloader, with a dedicated queue and output settings
-- Compact 740 � 520 default window (resizable down to 700 � 490)
+- Compact 740 × 520 default window (resizable down to 700 × 490)
 - Extract animation frames into numbered images in a dedicated Output subfolder
 - Create GIF, animated WebP, or MNG from still images with adjustable timing, looping, and frame order
 - Add files through the file picker or drag and drop
@@ -71,7 +76,7 @@ Choose a workflow in **Mode**:
   A canceled or failed extraction may leave the frames already written in that folder.
 - **Create animation** combines all queued still images into GIF, WebP, or MNG.
   Choose the format, select rows and use **Up / Down** to arrange playback order,
-  set **Delay � ms** (100 ms by default), and choose whether to **Loop**.
+  set **Delay · ms** (100 ms by default), and choose whether to **Loop**.
   Timing is rounded to the nearest 10 ms. At least two still images are required.
   Different sizes are centered on a transparent canvas without stretching; resize
   settings apply before padding. Output is `Output/animation-conv.gif` (or the
