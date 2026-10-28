@@ -1,7 +1,7 @@
 
 # Image Converter
 <div align="center">
-    <img src="/app-screenshot1.png" width="600px"</img> 
+    <img src="/Screenshot1.png" width="600px"</img> 
 </div>
 
 ⚠️Disclaimer⚠️: This app was created with the help of ChatGPT/Codex. 
