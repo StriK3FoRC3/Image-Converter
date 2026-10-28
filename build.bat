@@ -14,8 +14,9 @@ if not exist "%CSC%" (
   exit /b 1
 )
 if not exist "%REF%\PresentationCore.dll" (
-  echo .NET Framework reference assemblies were not found.
-  exit /b 1
+  echo Developer pack not found. Building with installed Windows framework libraries...
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools\build-local.ps1 || exit /b 1
+  exit /b 0
 )
 if not exist "%MAGICK_CORE%\lib\netstandard20\Magick.NET.Core.dll" goto restore_dependencies
 if not exist "%MAGICK_Q%\lib\netstandard20\Magick.NET-Q16-AnyCPU.dll" goto restore_dependencies

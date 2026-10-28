@@ -7,3 +7,5 @@
 *.dll binary
 *.exe binary
 *.nupkg binary
+*.pdf binary
+*.mp4 binary

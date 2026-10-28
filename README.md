@@ -14,6 +14,12 @@ I created this portable program so I can quickly convert any image or video to w
 
 ## Features
 
+- Modern dark interface inspired by YTDownloader, with a dedicated queue and output settings
+- Compact 740 × 520 default window (resizable down to 700 × 490)
+- Extract animation frames into numbered images in a dedicated Output subfolder
+- Create GIF, animated WebP, or MNG from still images with adjustable timing, looping, and frame order
+- Add files through the file picker or drag and drop
+- Responsive background image conversion with batch progress
 - Convert every supported file in the `Input` folder as one batch
 - Drag files or folders onto the window without adding duplicate filenames
 - Convert images between common, modern, and specialist formats
@@ -50,9 +56,30 @@ HEIF/HEIC output is unavailable because the bundled codec does not encode HEVC-b
 1. Put supported files in `Input` beside the executable, or drag files and folders onto the app.
 2. Choose one output format.
 3. Optionally enter a maximum width, maximum height, or scale percentage.
-4. Select **Convert**.
+4. Select **Convert all**. Settings are locked until the batch finishes; **Cancel** stops after the current codec operation.
 
 Images and single-page PDFs are written directly to `Output`. Multi-page PDFs and video image sequences are placed in their own `name-conv` folder. **Clear** removes files from `Input`; it does not delete converted output.
+
+## Animation tools
+
+Choose a workflow in **Mode**:
+
+- **Convert files** keeps the existing image, PDF, and video batch workflow.
+- **Extract frames** writes each image's frames to `Output/name-frames/frame-00001.png`
+  (or the selected format). Animation delta frames are composited into full images.
+  Repeated runs create a new numbered folder rather than overwrite earlier frames.
+  A canceled or failed extraction may leave the frames already written in that folder.
+- **Create animation** combines all queued still images into GIF, WebP, or MNG.
+  Choose the format, select rows and use **Up / Down** to arrange playback order,
+  set **Delay · ms** (100 ms by default), and choose whether to **Loop**.
+  Timing is rounded to the nearest 10 ms. At least two still images are required.
+  Different sizes are centered on a transparent canvas without stretching; resize
+  settings apply before padding. Output is `Output/animation-conv.gif` (or the
+  selected format), with a numbered suffix when that filename already exists.
+  Canceling creation does not publish an incomplete animation.
+
+Refresh and adding files preserve the current queue order. New files are appended
+in filename order. Order is kept for the current session.
 
 ## Local Data
 
@@ -66,7 +93,7 @@ The app does not collect telemetry or upload files.
 
 ## Build
 
-Building requires Windows, the .NET Framework 4.7.1 developer pack, and a Windows SDK. Run:
+Building requires Windows and the .NET Framework. The build prefers the .NET Framework 4.7.1 developer pack and Windows SDK; when the developer pack is absent, it can use the installed Windows framework libraries. Run:
 
 ```bat
 build.bat
@@ -91,3 +118,17 @@ Bug reports, feature ideas, and noncommercial contributions are welcome. See [CO
 Image Converter is available under the [PolyForm Noncommercial License 1.0.0](LICENSE) You may use, modify, and distribute it for permitted noncommercial purposes. Commercial use is not granted by this license.
 
 Third-party components retain their own licenses. See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md); complete dependency notices are included with every build.
+
+## UI and conversion checks
+
+Run `powershell -ExecutionPolicy Bypass -File tools/build-local.ps1 -Test` on Windows.
+The smoke suite uses an isolated `build/tests` folder, checks all 32 format choices,
+minimum-size layout, duplicate imports, seven image encoders, aspect-ratio resizing,
+error recovery, and cancellation. Animation checks cover GIF/WebP/MNG round-trips,
+frame ordering, timing, looping, mixed-size padding, and full-frame extraction.
+It also writes UI preview images to that folder.
+PDF and video fixtures are tested when present in `tests/fixtures`. Video decoding
+still depends on Windows media support; an unavailable decoder is reported as a skip.
+
+Image decoding and encoding now run off the UI thread. A cancellation request is
+observed between codec operations; an in-progress native codec call must finish first.
