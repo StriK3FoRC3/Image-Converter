@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -22,8 +22,8 @@ using Windows.Storage.Streams;
 [assembly: AssemblyCompany("StriK3FoRC3")]
 [assembly: AssemblyProduct("Image Converter")]
 [assembly: AssemblyCopyright("Copyright (c) 2026 StriK3FoRC3")]
-[assembly: AssemblyVersion("1.0.1.0")]
-[assembly: AssemblyFileVersion("1.0.1.0")]
+[assembly: AssemblyVersion("1.1.0.0")]
+[assembly: AssemblyFileVersion("1.1.0.0")]
 
 namespace ImageConverterUtility
 {
@@ -32,6 +32,7 @@ namespace ImageConverterUtility
         [STAThread]
         private static int Main(string[] args)
         {
+            ScrollbarTheme.Initialize();
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             if (args.Any(arg => string.Equals(arg, "--batch", StringComparison.OrdinalIgnoreCase)))
@@ -48,19 +49,31 @@ namespace ImageConverterUtility
 
     internal sealed class ConverterForm : Form
     {
-        private static readonly Color ColorBg = Color.FromArgb(25, 25, 25);
-        private static readonly Color ColorPanel = Color.FromArgb(35, 35, 35);
-        private static readonly Color ColorTab = Color.FromArgb(43, 43, 43);
-        private static readonly Color ColorText = Color.FromArgb(245, 245, 245);
-        private static readonly Color ColorMuted = Color.FromArgb(180, 180, 180);
-        private static readonly Color ColorAccent = Color.FromArgb(159, 0, 255);
+        private static readonly Color ColorBg = Color.FromArgb(17, 18, 22);
+        private static readonly Color ColorPanel = Color.FromArgb(26, 28, 35);
+        private static readonly Color ColorTab = Color.FromArgb(35, 37, 46);
+        private static readonly Color ColorText = Color.FromArgb(235, 240, 249);
+        private static readonly Color ColorMuted = Color.FromArgb(153, 147, 169);
+        private static readonly Color ColorAccent = Color.FromArgb(124, 108, 245);
         private static readonly Color ColorBlue = Color.FromArgb(82, 139, 255);
         private static readonly Color ColorGreen = Color.FromArgb(76, 175, 80);
         private static readonly Color ColorRed = Color.FromArgb(244, 67, 54);
         private static readonly Color ColorYellow = Color.FromArgb(255, 214, 64);
 
-        private readonly ListView fileList = new ListView();
-        private readonly ComboBox outputFormatBox = new ComboBox();
+        private readonly ListView fileList = new BufferedListView();
+        private readonly Label queueHeading = new Label(), emptyState = new Label(), settingsHeading = new Label(), resizeHint = new Label(), destinationHint = new Label(), progressLabel = new Label();
+        private readonly Panel progressTrack = new Panel(), progressFill = new Panel();
+        private readonly StyledButton addButton;
+        private readonly ImageList rowHeightImages = new ImageList();
+        private Rectangle queueCard, settingsCard;
+        private bool isBusy, closeWhenFinished;
+        private readonly ComboBox modeBox = new DarkComboBox();
+        private readonly TextBox delayBox = new TextBox();
+        private readonly Label delayLabel = new Label();
+        private readonly CheckBox loopBox = new CheckBox();
+        private readonly StyledButton moveUpButton, moveDownButton;
+        private readonly ComboBox outputFormatBox = new DarkComboBox();
+        private Label pageTitle, subtitle;
         private readonly TextBox widthBox = new TextBox();
         private readonly TextBox heightBox = new TextBox();
         private readonly TextBox scaleBox = new TextBox();
@@ -73,13 +86,12 @@ namespace ImageConverterUtility
         private readonly StyledButton cancelButton;
         private readonly StyledButton infoButton;
         private CancellationTokenSource conversionCancel;
-        private FormatPopup formatPopup;
         private bool fittingColumns;
         private bool uiBuilt;
 
-        private readonly Font titleFont = new Font("Segoe UI", 20f, FontStyle.Bold, GraphicsUnit.Pixel);
-        private readonly Font normalFont = new Font("Segoe UI", 14f, FontStyle.Regular, GraphicsUnit.Pixel);
-        private readonly Font buttonFont = new Font("Segoe UI", 14f, FontStyle.Bold, GraphicsUnit.Pixel);
+        private readonly Font titleFont = new Font("Segoe UI", 23f, FontStyle.Bold, GraphicsUnit.Pixel);
+        private readonly Font normalFont = new Font("Segoe UI", 13f, FontStyle.Regular, GraphicsUnit.Pixel);
+        private readonly Font buttonFont = new Font("Segoe UI", 13f, FontStyle.Bold, GraphicsUnit.Pixel);
 
         private readonly string exeDir;
         private readonly string inputDir;
@@ -145,18 +157,24 @@ namespace ImageConverterUtility
             Directory.CreateDirectory(inputDir);
             Directory.CreateDirectory(outputDir);
 
-            refreshButton = new StyledButton("Refresh", ColorBlue, buttonFont);
-            openInputButton = new StyledButton("Input", ColorAccent, buttonFont);
-            openOutputButton = new StyledButton("Output", ColorAccent, buttonFont);
-            convertButton = new StyledButton("Convert", ColorGreen, buttonFont);
-            clearButton = new StyledButton("Clear", ColorRed, buttonFont);
+            refreshButton = new StyledButton("Refresh", ColorMuted, buttonFont);
+            openInputButton = new StyledButton("Input folder", ColorMuted, buttonFont);
+            openOutputButton = new StyledButton("Open output", ColorMuted, buttonFont);
+            convertButton = new StyledButton("Convert all", ColorAccent, buttonFont);
+            clearButton = new StyledButton("Clear input", ColorMuted, buttonFont);
             cancelButton = new StyledButton("Cancel", ColorRed, buttonFont);
-            infoButton = new StyledButton("i", ColorYellow, new Font("Segoe UI", 14f, FontStyle.Bold, GraphicsUnit.Pixel));
+            infoButton = new StyledButton("Formats & help", ColorMuted, buttonFont);
 
+            addButton = new StyledButton("+ Add files", ColorAccent, buttonFont);
+            moveUpButton = new StyledButton("Up", ColorMuted, buttonFont);
+            moveDownButton = new StyledButton("Down", ColorMuted, buttonFont);
+            convertButton.Primary = true;
             Text = "Image Converter";
             Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
-            MinimumSize = new System.Drawing.Size(624, 432);
-            Size = new System.Drawing.Size(720, 496);
+            MinimumSize = new System.Drawing.Size(700, 490);
+            Size = new System.Drawing.Size(740, 520);
+            DoubleBuffered = true;
+            SetStyle(ControlStyles.ResizeRedraw, true);
             StartPosition = FormStartPosition.CenterScreen;
             BackColor = ColorBg;
             ForeColor = ColorText;
@@ -167,6 +185,12 @@ namespace ImageConverterUtility
             BuildUi();
             WireEvents();
             RefreshFileList();
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            base.Dispose(disposing);
+            if (disposing) { rowHeightImages.Dispose(); titleFont.Dispose(); normalFont.Dispose(); buttonFont.Dispose(); }
         }
 
         protected override void OnHandleCreated(EventArgs e)
@@ -185,16 +209,34 @@ namespace ImageConverterUtility
         {
             base.OnPaint(e);
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            DrawPurpleOutline(e.Graphics, widthBox.Bounds, 6);
-            DrawPurpleOutline(e.Graphics, heightBox.Bounds, 6);
-            DrawPurpleOutline(e.Graphics, scaleBox.Bounds, 6);
-            Rectangle listOutline = new Rectangle(fileList.Left, fileList.Top - 5, fileList.Width, fileList.Height + 5);
-            DrawPurpleOutline(e.Graphics, listOutline, 6);
+            if (!uiBuilt) return;
+            foreach (Rectangle rect in new[] { queueCard, settingsCard })
+            using (GraphicsPath path = RoundedRect(rect, 12))
+            using (SolidBrush fill = new SolidBrush(ColorPanel))
+            using (Pen border = new Pen(ColorTab))
+            { e.Graphics.FillPath(fill, path); e.Graphics.DrawPath(border, path); }
+            foreach (Control field in new Control[] { widthBox, heightBox, scaleBox, delayBox })
+            {
+                if (!field.Visible) continue;
+                Rectangle rect = field.Bounds; rect.Inflate(6, 5);
+                using (GraphicsPath path = RoundedRect(rect, 6))
+                using (SolidBrush fill = new SolidBrush(ColorTab))
+                using (Pen border = new Pen(field.Focused ? ColorAccent : ColorTab))
+                { e.Graphics.FillPath(fill, path); e.Graphics.DrawPath(border, path); }
+            }
+        }
+
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            if (isBusy) { e.Cancel = true; closeWhenFinished = true;
+                if (conversionCancel != null) conversionCancel.Cancel();
+                SetStatus("Stopping safely before closing...", ColorMuted); }
+            base.OnFormClosing(e);
         }
 
         protected override void OnDragEnter(DragEventArgs e)
         {
-            if (e.Data != null && e.Data.GetDataPresent(DataFormats.FileDrop))
+            if (!isBusy && e.Data != null && e.Data.GetDataPresent(DataFormats.FileDrop))
             {
                 e.Effect = DragDropEffects.Copy;
             }
@@ -203,40 +245,61 @@ namespace ImageConverterUtility
 
         protected override void OnDragDrop(DragEventArgs e)
         {
-            if (e.Data == null || !e.Data.GetDataPresent(DataFormats.FileDrop)) return;
+            if (isBusy || e.Data == null || !e.Data.GetDataPresent(DataFormats.FileDrop)) return;
             string[] dropped = (string[])e.Data.GetData(DataFormats.FileDrop);
-            int copied = 0;
-            int duplicates = 0;
-            foreach (string path in ExpandDroppedFiles(dropped))
-            {
-                string ext = Path.GetExtension(path);
-                if (!imageExtensions.Contains(ext) && !videoExtensions.Contains(ext)) continue;
-                if (IsDuplicateInput(path))
-                {
-                    duplicates++;
-                    continue;
-                }
-                string target = Path.Combine(inputDir, Path.GetFileName(path));
-                File.Copy(path, target);
-                copied++;
-            }
-            RefreshFileList();
-            string message = copied > 0 ? "Added " + copied + " file(s) to Input." : (duplicates > 0 ? "Duplicate file(s) skipped." : "No supported files found in the drop.");
-            SetStatus(message, copied > 0 ? ColorGreen : ColorYellow);
+            ImportFiles(dropped);
             base.OnDragDrop(e);
+        }
+
+        private void ImportFiles(string[] dropped)
+        {
+            int copied = 0, duplicates = 0, failed = 0;
+            string error = null;
+            try
+            {
+                foreach (string path in ExpandDroppedFiles(dropped))
+                {
+                    string ext = Path.GetExtension(path);
+                    if (!imageExtensions.Contains(ext) && !videoExtensions.Contains(ext)) continue;
+                    if (IsDuplicateInput(path)) { duplicates++; continue; }
+                    try { File.Copy(path, Path.Combine(inputDir, Path.GetFileName(path))); copied++; }
+                    catch (IOException ex) { failed++; error = ex.Message; }
+                    catch (UnauthorizedAccessException ex) { failed++; error = ex.Message; }
+                }
+            }
+            catch (IOException ex) { failed++; error = ex.Message; }
+            catch (UnauthorizedAccessException ex) { failed++; error = ex.Message; }
+            RefreshFileList();
+            SetStatus("Added " + copied + " files" + (duplicates > 0 ? " · " + duplicates + " duplicates skipped" : "") +
+                (failed > 0 ? " · " + failed + " failed: " + error : ""), failed > 0 ? ColorYellow : ColorMuted);
         }
 
         private void BuildUi()
         {
-            Controls.Add(MakeLabel("Image Converter", titleFont, ColorText));
-            Controls.Add(MakeLabel("Batch converts every supported file in Input. Drop files here to add them.", normalFont, ColorMuted));
+            Controls.Add(pageTitle = MakeLabel("Image Converter", titleFont, ColorText));
+            Controls.Add(subtitle = MakeLabel("Images, PDFs & videos. One simple batch.", normalFont, ColorMuted));
 
             ConfigureCombo(outputFormatBox, outputFormats.Cast<object>(), LoadSelectedFormatIndex());
             ConfigureNumberText(widthBox, "");
             ConfigureNumberText(heightBox, "");
             ConfigureNumberText(scaleBox, "100");
             ConfigureScaleBox();
+            ConfigureCombo(modeBox, new object[] { "Convert files", "Extract frames", "Create animation" }, 0);
+            ConfigureNumberText(delayBox, "100");
+            delayBox.AccessibleName = "Frame duration in milliseconds";
+            delayLabel.Text = "Delay · ms";
+            delayLabel.ForeColor = ColorMuted; delayLabel.BackColor = ColorPanel;
+            loopBox.Text = "Loop"; loopBox.Checked = true;
+            loopBox.ForeColor = ColorText; loopBox.BackColor = ColorPanel;
+            modeBox.AccessibleName = "Conversion mode";
+            Controls.AddRange(new Control[] { modeBox, delayBox, delayLabel, loopBox, moveUpButton, moveDownButton });
 
+            rowHeightImages.ImageSize = new System.Drawing.Size(1, 27);
+            fileList.SmallImageList = rowHeightImages;
+            fileList.AllowDrop = true;
+            fileList.DragEnter += delegate(object sender, DragEventArgs e) { OnDragEnter(e); };
+            fileList.DragDrop += delegate(object sender, DragEventArgs e) { OnDragDrop(e); };
+            fileList.ShowItemToolTips = true;
             fileList.View = View.Details;
             fileList.FullRowSelect = true;
             fileList.MultiSelect = true;
@@ -282,12 +345,50 @@ namespace ImageConverterUtility
             Controls.Add(fileList);
             Controls.Add(statusLabel);
 
+            queueHeading.Text = "CONVERSION QUEUE";
+            settingsHeading.Visible = false;
+            resizeHint.Text = "Blank dimensions use scale.\r\nKeep proportions. Never upscale.";
+            destinationHint.Text = "Saved to the Output folder\r\nas filename-conv. Originals stay intact.";
+            emptyState.Text = "Drop your files here\r\n\r\nImages, PDFs and videos welcome\r\nor use + Add files to get started";
+            emptyState.TextAlign = ContentAlignment.MiddleCenter;
+            emptyState.AllowDrop = true;
+            emptyState.DragEnter += delegate(object sender, DragEventArgs e) { OnDragEnter(e); };
+            emptyState.DragDrop += delegate(object sender, DragEventArgs e) { OnDragDrop(e); };
+            foreach (Label label in new[] { queueHeading, settingsHeading, resizeHint, destinationHint, emptyState, progressLabel })
+            { label.Font = normalFont; label.ForeColor = ColorMuted; label.BackColor = ColorPanel; Controls.Add(label); }
+            settingsHeading.Font = buttonFont; settingsHeading.ForeColor = ColorText;
+            progressLabel.BackColor = ColorBg; progressLabel.TextAlign = ContentAlignment.MiddleRight;
+            progressTrack.BackColor = ColorTab; progressFill.BackColor = ColorAccent;
+            progressTrack.Controls.Add(progressFill); Controls.Add(progressTrack); Controls.Add(addButton);
+            emptyState.BringToFront();
+            foreach (Control c in new Control[] { addButton, refreshButton, openInputButton, clearButton, moveUpButton, moveDownButton }) c.BackColor = ColorPanel;
+            outputFormatBox.AccessibleName = "Output format";
+            widthBox.AccessibleName = "Maximum width in pixels";
+            heightBox.AccessibleName = "Maximum height in pixels";
+            scaleBox.AccessibleName = "Scale percentage, 5 to 100";
+            fileList.AccessibleName = "Conversion queue";
+            int tab = 0;
+            foreach (Control control in new Control[] { modeBox, outputFormatBox, widthBox, heightBox, scaleBox, delayBox, loopBox, addButton, fileList, moveUpButton, moveDownButton,
+                convertButton, cancelButton, openOutputButton, refreshButton, openInputButton, clearButton, infoButton }) control.TabIndex = tab++;
             uiBuilt = true;
             LayoutControls();
+            UpdateMode();
         }
 
         private void WireEvents()
         {
+            addButton.Click += delegate
+            {
+                using (OpenFileDialog dialog = new OpenFileDialog())
+                {
+                    dialog.Title = "Add images, PDFs or videos"; dialog.Multiselect = true;
+                    dialog.Filter = "Supported files|" + string.Join(";", imageExtensions.Concat(videoExtensions).OrderBy(x => x).Select(x => "*" + x)) + "|All files|*.*";
+                    if (dialog.ShowDialog(this) == DialogResult.OK) ImportFiles(dialog.FileNames);
+                }
+            };
+            modeBox.SelectedIndexChanged += delegate { UpdateMode(); };
+            moveUpButton.Click += delegate { MoveSelectedFrames(-1); };
+            moveDownButton.Click += delegate { MoveSelectedFrames(1); };
             refreshButton.Click += delegate { RefreshFileList(); };
             openInputButton.Click += delegate { OpenFolder(inputDir); };
             openOutputButton.Click += delegate { OpenFolder(outputDir); };
@@ -301,6 +402,8 @@ namespace ImageConverterUtility
             cancelButton.Click += delegate
             {
                 if (conversionCancel != null) conversionCancel.Cancel();
+                cancelButton.Enabled = false;
+                SetStatus("Canceling after the current operation...", ColorMuted);
             };
             infoButton.Click += delegate { ShowSupportedFormatsDialog(); };
         }
@@ -309,41 +412,77 @@ namespace ImageConverterUtility
         {
             if (!uiBuilt || Controls.Count < 2) return;
 
-            int margin = 19;
-            int w = ClientSize.Width;
-            int y = 11;
+            int w = ClientSize.Width, h = ClientSize.Height, margin = 16;
+            pageTitle.SetBounds(margin, 12, 350, 30);
+            subtitle.SetBounds(margin, 43, w - 165, 20);
+            infoButton.SetBounds(w - margin - 120, 17, 120, 30);
+            settingsCard = new Rectangle(margin, 72, w - margin * 2, 112);
+            queueCard = new Rectangle(margin, 196, w - margin * 2, h - 274);
+            int x = margin + 12;
+            AddField("Mode", modeBox, x, 81, 152, 28);
+            AddField("Format", outputFormatBox, x + 164, 81, 122, 28);
+            AddField("Width · px", widthBox, x + 304, 81, 86, 22);
+            AddField("Height · px", heightBox, x + 408, 81, 86, 22);
+            AddField("Scale · %", scaleBox, x + 512, 81, w - x - 546, 22);
+            delayLabel.SetBounds(x, 148, 100, 22);
+            delayBox.SetBounds(x + 106, 148, 54, 22);
+            loopBox.SetBounds(x + 176, 144, 68, 28);
+            bool creating = modeBox.SelectedIndex == 2;
+            resizeHint.SetBounds(creating ? x + 250 : x, 145, creating ? w - x - 278 : w - x - 28, 32);
+            destinationHint.Visible = false;
+            queueHeading.SetBounds(x, 205, w - 56, 22);
+            addButton.SetBounds(x, 232, 100, 28);
+            refreshButton.SetBounds(x + 108, 232, 72, 28);
+            openInputButton.SetBounds(x + 188, 232, 100, 28);
+            clearButton.SetBounds(x + 296, 232, 90, 28);
+            moveUpButton.SetBounds(queueCard.Right - 132, 232, 48, 28);
+            moveDownButton.SetBounds(queueCard.Right - 78, 232, 66, 28);
+            fileList.SetBounds(x, 270, w - 56, Math.Max(80, queueCard.Bottom - 282));
+            emptyState.SetBounds(x, 270, w - 56, fileList.Height);
+            int footer = h - 66;
+            statusLabel.SetBounds(margin, footer, w - 164, 22);
+            progressLabel.SetBounds(w - 144, footer, 128, 22);
+            progressTrack.SetBounds(margin, footer + 35, w - margin * 2 - 280, 5);
+            progressFill.Height = 5;
+            openOutputButton.SetBounds(w - margin - 264, footer + 26, 116, 32);
+            convertButton.SetBounds(w - margin - 140, footer + 26, 140, 32);
+            cancelButton.Bounds = convertButton.Bounds;
+            FitColumnsToList(); Invalidate();
+        }
 
-            Controls[0].SetBounds(margin, y, 288, 27);
-            Controls[1].SetBounds(margin, y + 29, w - margin * 2, 20);
-            infoButton.SetBounds(w - margin - 26, y + 1, 26, 26);
+        private void UpdateMode()
+        {
+            bool creating = modeBox.SelectedIndex == 2;
+            delayBox.Visible = delayLabel.Visible = loopBox.Visible = creating;
+            moveUpButton.Visible = moveDownButton.Visible = creating;
+            if (creating && !SelectedFormat().AnimationCapable) outputFormatBox.SelectedIndex = 3;
+            if (modeBox.SelectedIndex == 1 && SelectedFormat().AnimationCapable) outputFormatBox.SelectedIndex = 0;
+            convertButton.Text = creating ? "Create animation" : modeBox.SelectedIndex == 1 ? "Extract frames" : "Convert all";
+            resizeHint.Text = creating ? "GIF, WebP or MNG · queue order\r\nDifferent sizes are centered on one canvas." :
+                modeBox.SelectedIndex == 1 ? "Each image gets its own folder in Output. Frames are numbered in playback order." :
+                "Blank dimensions use scale. Keep proportions; never upscale.";
+            emptyState.Text = creating ? "Add still images, then arrange them with Up / Down." : "Drop files here or use + Add files.\r\nImages, PDFs and videos";
+            progressFill.Width = 0; progressLabel.Text = "Ready";
+            LayoutControls();
+        }
 
-            y += 61;
-            int controlH = 26;
-            AddField("Output", outputFormatBox, margin, y, 58, 170, controlH);
-            AddField("Width", widthBox, margin + 299, y, 48, 62, controlH);
-            AddField("Height", heightBox, margin + 419, y, 50, 62, controlH);
-            AddField("Scale %", scaleBox, margin + 541, y, 54, 52, controlH);
-
-            int listTop = y + 40;
-            int bottomArea = 76;
-            fileList.SetBounds(margin, listTop, w - margin * 2, Math.Max(144, ClientSize.Height - listTop - bottomArea));
-            Invalidate();
-
-            const int buttonW = 69;
-            const int buttonH = 30;
-            const int gap = 6;
-            int totalButtonWidth = buttonW * 5 + gap * 4;
-            int buttonX = Math.Max(margin, (w - totalButtonWidth) / 2);
-            int buttonY = fileList.Bottom + 11;
-            refreshButton.SetBounds(buttonX, buttonY, buttonW, buttonH);
-            openInputButton.SetBounds(buttonX + (buttonW + gap), buttonY, buttonW, buttonH);
-            openOutputButton.SetBounds(buttonX + (buttonW + gap) * 2, buttonY, buttonW, buttonH);
-            convertButton.SetBounds(buttonX + (buttonW + gap) * 3, buttonY, buttonW, buttonH);
-            clearButton.SetBounds(buttonX + (buttonW + gap) * 4, buttonY, buttonW, buttonH);
-            cancelButton.SetBounds(w - margin - buttonW, buttonY, buttonW, buttonH);
-
-            statusLabel.SetBounds(margin, buttonY + 35, w - margin * 2, 20);
-            FitColumnsToList();
+        private void MoveSelectedFrames(int direction)
+        {
+            if (isBusy) return;
+            var selected = fileList.SelectedItems.Cast<ListViewItem>().ToArray();
+            if (direction > 0) Array.Reverse(selected);
+            fileList.BeginUpdate();
+            try
+            {
+                foreach (var item in selected)
+                {
+                    int index = item.Index, next = index + direction;
+                    if (next < 0 || next >= fileList.Items.Count || fileList.Items[next].Selected) continue;
+                    fileList.Items.Remove(item); fileList.Items.Insert(next, item); item.Selected = true;
+                }
+            }
+            finally { fileList.EndUpdate(); }
+            fileList.Focus();
         }
 
         private void FitColumnsToList()
@@ -353,10 +492,10 @@ namespace ImageConverterUtility
             try
             {
                 int clientWidth = Math.Max(0, fileList.ClientSize.Width);
-                int fileWidth = Math.Max(120, Math.Min(160, clientWidth / 5));
+                int fileWidth = Math.Max(140, clientWidth * 42 / 100);
                 int typeWidth = 68;
                 int sizeWidth = 82;
-                int statusWidth = Math.Max(120, clientWidth - fileWidth - typeWidth - sizeWidth + 2);
+                int statusWidth = Math.Max(60, clientWidth - fileWidth - typeWidth - sizeWidth - 2);
                 fileList.Columns[0].Width = fileWidth;
                 fileList.Columns[1].Width = typeWidth;
                 fileList.Columns[2].Width = sizeWidth;
@@ -369,7 +508,7 @@ namespace ImageConverterUtility
             HideHorizontalScrollBar();
         }
 
-        private void AddField(string text, Control control, int x, int y, int labelWidth, int controlWidth, int controlHeight)
+        private void AddField(string text, Control control, int x, int y, int controlWidth, int controlHeight)
         {
             Label label = Controls.OfType<Label>().FirstOrDefault(l => (string)l.Tag == "field:" + text);
             if (label == null)
@@ -378,8 +517,11 @@ namespace ImageConverterUtility
                 label.Tag = "field:" + text;
                 Controls.Add(label);
             }
-            label.SetBounds(x, y + 6, labelWidth, 21);
-            control.SetBounds(x + labelWidth + 3, y, controlWidth, controlHeight);
+            label.BackColor = ColorPanel;
+            label.SetBounds(x, y, controlWidth + 10, 20);
+            // Number fields have a painted border extending five pixels above the text.
+            int fieldTop = y + (control is TextBox ? 30 : 23);
+            control.SetBounds(x, fieldTop, controlWidth, controlHeight);
         }
 
         private Label MakeLabel(string text, Font font, Color color)
@@ -402,19 +544,11 @@ namespace ImageConverterUtility
             combo.ForeColor = ColorText;
             combo.Font = normalFont;
             combo.DrawMode = DrawMode.OwnerDrawFixed;
-            combo.ItemHeight = 20;
+            combo.ItemHeight = 22;
             combo.MaxDropDownItems = 14;
             combo.IntegralHeight = false;
             combo.DropDownHeight = combo.ItemHeight * 14 + 2;
             combo.DrawItem += DrawComboItem;
-            combo.DropDown += delegate
-            {
-                combo.BeginInvoke(new Action(delegate
-                {
-                    combo.DroppedDown = false;
-                    ShowFormatPopup();
-                }));
-            };
             combo.Items.AddRange(values.Cast<object>().ToArray());
             combo.SelectedIndex = selected;
         }
@@ -432,27 +566,6 @@ namespace ImageConverterUtility
             }
             Rectangle textBounds = new Rectangle(e.Bounds.X + 6, e.Bounds.Y, e.Bounds.Width - 8, e.Bounds.Height);
             TextRenderer.DrawText(e.Graphics, combo.Items[e.Index].ToString(), normalFont, textBounds, fg, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
-        }
-
-        private void ShowFormatPopup()
-        {
-            if (formatPopup != null && !formatPopup.IsDisposed)
-            {
-                formatPopup.Close();
-            }
-
-            System.Drawing.Point location = outputFormatBox.PointToScreen(new System.Drawing.Point(0, outputFormatBox.Height));
-            int width = outputFormatBox.Width;
-            formatPopup = new FormatPopup(outputFormatBox, outputFormats, normalFont, width);
-            formatPopup.ItemChosen += delegate(int index)
-            {
-                if (index >= 0 && index < outputFormatBox.Items.Count)
-                {
-                    outputFormatBox.SelectedIndex = index;
-                }
-            };
-            formatPopup.Show(this);
-            formatPopup.Location = location;
         }
 
         private void ShowSupportedFormatsDialog()
@@ -480,6 +593,7 @@ namespace ImageConverterUtility
                 list.TabStop = false;
                 list.BorderStyle = BorderStyle.None;
                 list.ScrollBars = ScrollBars.Vertical;
+                list.HandleCreated += delegate { ScrollbarTheme.Apply(list.Handle); };
                 list.BackColor = ColorPanel;
                 list.ForeColor = ColorText;
                 list.Font = normalFont;
@@ -569,18 +683,10 @@ namespace ImageConverterUtility
             box.Text = value;
             box.MaxLength = 6;
             box.TextAlign = HorizontalAlignment.Center;
+            box.GotFocus += delegate { Invalidate(); };
+            box.LostFocus += delegate { Invalidate(); };
             box.KeyPress += NumberTextBoxKeyPress;
             box.TextChanged += NumberTextBoxTextChanged;
-        }
-
-        private void DrawPurpleOutline(Graphics graphics, Rectangle bounds, int radius)
-        {
-            Rectangle rect = new Rectangle(bounds.X - 2, bounds.Y - 2, bounds.Width + 3, bounds.Height + 3);
-            using (GraphicsPath path = RoundedRect(rect, radius))
-            using (Pen pen = new Pen(ColorAccent, 1f))
-            {
-                graphics.DrawPath(pen, path);
-            }
         }
 
         private void ConfigureScaleBox()
@@ -646,7 +752,7 @@ namespace ImageConverterUtility
         {
             using (SolidBrush bg = new SolidBrush(ColorTab))
             using (SolidBrush fg = new SolidBrush(ColorMuted))
-            using (Pen border = new Pen(ColorAccent))
+            using (Pen border = new Pen(ColorTab))
             {
                 Rectangle bounds = e.Bounds;
                 if (e.ColumnIndex == fileList.Columns.Count - 1)
@@ -654,7 +760,7 @@ namespace ImageConverterUtility
                     bounds.Width = Math.Max(bounds.Width, fileList.ClientSize.Width - bounds.X);
                 }
                 e.Graphics.FillRectangle(bg, bounds);
-                e.Graphics.DrawRectangle(border, bounds.X, bounds.Y, bounds.Width - 1, bounds.Height - 1);
+                e.Graphics.DrawLine(border, bounds.Left, bounds.Bottom - 1, bounds.Right, bounds.Bottom - 1);
                 Rectangle textBounds = new Rectangle(bounds.X + 6, bounds.Y, bounds.Width - 8, bounds.Height);
                 TextRenderer.DrawText(e.Graphics, e.Header.Text, normalFont, textBounds, ColorMuted, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
             }
@@ -685,7 +791,7 @@ namespace ImageConverterUtility
             Rectangle textBounds = new Rectangle(e.Bounds.X + 8, e.Bounds.Y, e.Bounds.Width - 12, e.Bounds.Height);
             TextRenderer.DrawText(e.Graphics, e.SubItem.Text, normalFont, textBounds, fg, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
 
-            using (Pen divider = new Pen(ColorAccent))
+            using (Pen divider = new Pen(ColorTab))
             {
                 e.Graphics.DrawLine(divider, e.Bounds.Left, e.Bounds.Bottom - 1, e.Bounds.Right, e.Bounds.Bottom - 1);
             }
@@ -695,9 +801,15 @@ namespace ImageConverterUtility
         {
             Directory.CreateDirectory(inputDir);
             Directory.CreateDirectory(outputDir);
+            var previousOrder = fileList.Items.Cast<ListViewItem>().Where(i => i.Tag is string)
+                .Select((item, index) => new { Path = (string)item.Tag, Index = index })
+                .ToDictionary(i => i.Path, i => i.Index, StringComparer.OrdinalIgnoreCase);
+            fileList.BeginUpdate();
+            try
+            {
             fileList.Items.Clear();
 
-            foreach (string file in Directory.EnumerateFiles(inputDir).OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase))
+            foreach (string file in Directory.EnumerateFiles(inputDir).OrderBy(f => previousOrder.ContainsKey(f) ? previousOrder[f] : int.MaxValue).ThenBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase))
             {
                 string ext = Path.GetExtension(file);
                 bool isImage = imageExtensions.Contains(ext);
@@ -707,13 +819,20 @@ namespace ImageConverterUtility
                 FileInfo info = new FileInfo(file);
                 ListViewItem item = new ListViewItem(Path.GetFileName(file));
                 item.Tag = file;
+                item.ToolTipText = file;
                 item.SubItems.Add(isVideo ? "Video" : (string.Equals(ext, ".pdf", StringComparison.OrdinalIgnoreCase) ? "PDF" : "Image"));
                 item.SubItems.Add(FormatBytes(info.Length));
                 item.SubItems.Add(isVideo ? "Video ready" : "Ready");
                 fileList.Items.Add(item);
             }
 
-            SetStatus(fileList.Items.Count + " file(s) in Input.", ColorMuted);
+            } finally { fileList.EndUpdate(); }
+            queueHeading.Text = "CONVERSION QUEUE  /  " + fileList.Items.Count + " files";
+            emptyState.Visible = fileList.Items.Count == 0;
+            fileList.Visible = fileList.Items.Count > 0;
+            convertButton.Enabled = fileList.Items.Count > 0 && !isBusy;
+            progressFill.Width = 0; progressLabel.Text = "Ready";
+            SetStatus(fileList.Items.Count == 0 ? "Add files to start your next batch." : fileList.Items.Count + " files ready to convert.", ColorMuted);
             HideHorizontalScrollBar();
         }
 
@@ -725,7 +844,13 @@ namespace ImageConverterUtility
                 return;
             }
 
+            if (isBusy) return;
+            if (modeBox.SelectedIndex == 2) { await CreateAnimationAsync(); return; }
+            bool extract = modeBox.SelectedIndex == 1;
+            OutputFormat batchFormat = SelectedFormat();
+            string batchResize = BuildMagickResize();
             ToggleBusy(true);
+            progressFill.Width = 0;
             conversionCancel = new CancellationTokenSource();
             CancellationToken token = conversionCancel.Token;
             int done = 0;
@@ -742,9 +867,16 @@ namespace ImageConverterUtility
 
                     try
                     {
-                        item.SubItems[3].Text = "Working";
+                        item.SubItems[3].Text = "Converting...";
+                        SetStatus("Converting " + Path.GetFileName(path), ColorMuted);
                         fileList.Invalidate(item.Bounds);
-                        if (isVideo)
+                        if (extract)
+                        {
+                            if (isVideo || string.Equals(Path.GetExtension(path), ".pdf", StringComparison.OrdinalIgnoreCase))
+                                throw new InvalidOperationException("Extract frames accepts images. Use Convert files for PDFs and videos.");
+                            await Task.Run(() => ExtractFramesCore(path, token, batchFormat, batchResize), token);
+                        }
+                        else if (isVideo)
                         {
                             await ConvertVideoAsync(path, token);
                         }
@@ -754,7 +886,7 @@ namespace ImageConverterUtility
                         }
                         else
                         {
-                            ConvertImage(path, token);
+                            await Task.Run(() => ConvertImageCore(path, token, batchFormat, batchResize), token);
                         }
                         item.SubItems[3].Text = "Done";
                         done++;
@@ -772,7 +904,8 @@ namespace ImageConverterUtility
                     }
                     fileList.Invalidate(item.Bounds);
                     SetStatus("Converted " + done + " file(s), " + failed + " failed.", failed > 0 ? ColorYellow : ColorGreen);
-                    await Task.Delay(15);
+                    progressFill.Width = progressTrack.Width * (done + failed) / fileList.Items.Count;
+                    progressLabel.Text = (done + failed) + " / " + fileList.Items.Count + " processed";
                 }
             }
             catch (OperationCanceledException)
@@ -784,6 +917,7 @@ namespace ImageConverterUtility
                 ToggleBusy(false);
                 conversionCancel.Dispose();
                 conversionCancel = null;
+                if (closeWhenFinished) BeginInvoke(new Action(Close));
             }
 
             SetStatus((canceled ? "Canceled. " : "Finished. ") + "Converted " + done + " file(s), " + failed + " failed.", canceled || failed > 0 ? ColorYellow : ColorGreen);
@@ -834,8 +968,12 @@ namespace ImageConverterUtility
 
         private void ConvertImage(string sourcePath, CancellationToken token)
         {
+            ConvertImageCore(sourcePath, token, SelectedFormat(), BuildMagickResize());
+        }
+
+        private void ConvertImageCore(string sourcePath, CancellationToken token, OutputFormat format, string resize)
+        {
             token.ThrowIfCancellationRequested();
-            OutputFormat format = SelectedFormat();
             string targetPath = Path.Combine(outputDir, Path.GetFileNameWithoutExtension(sourcePath) + "-conv" + format.PrimaryExtension);
 
             using (MagickImageCollection images = new MagickImageCollection(sourcePath))
@@ -846,7 +984,6 @@ namespace ImageConverterUtility
                     throw new InvalidOperationException("No image frames found");
                 }
 
-                string resize = BuildMagickResize();
                 if (!string.IsNullOrEmpty(resize))
                 {
                     MagickGeometry geometry = new MagickGeometry(resize);
@@ -883,6 +1020,127 @@ namespace ImageConverterUtility
                     images[0].Write(targetPath);
                 }
             }
+        }
+
+        private static string AvailableOutputPath(string path, bool directory = false)
+        {
+            if (!File.Exists(path) && !Directory.Exists(path)) return path;
+            string parent = Path.GetDirectoryName(path), stem = directory ? Path.GetFileName(path) : Path.GetFileNameWithoutExtension(path), ext = directory ? "" : Path.GetExtension(path);
+            for (int i = 2; ; i++)
+            {
+                string candidate = Path.Combine(parent, stem + "-" + i + ext);
+                if (!File.Exists(candidate) && !Directory.Exists(candidate)) return candidate;
+            }
+        }
+
+        private void ExtractFramesCore(string sourcePath, CancellationToken token, OutputFormat format, string resize)
+        {
+            token.ThrowIfCancellationRequested();
+            using (var frames = new MagickImageCollection(sourcePath))
+            {
+                if (frames.Count == 0) throw new InvalidOperationException("No image frames found.");
+                // Composite delta frames and disposal instructions into complete display frames.
+                frames.Coalesce();
+                string folder = AvailableOutputPath(Path.Combine(outputDir, Path.GetFileNameWithoutExtension(sourcePath) + "-frames"), true);
+                Directory.CreateDirectory(folder);
+                for (int i = 0; i < frames.Count; i++)
+                {
+                    token.ThrowIfCancellationRequested();
+                    var frame = frames[i];
+                    if (!string.IsNullOrEmpty(resize)) frame.Resize(new MagickGeometry(resize));
+                    frame.ResetPage();
+                    if (format.MaxDimension > 0 && (frame.Width > format.MaxDimension || frame.Height > format.MaxDimension))
+                        throw new InvalidOperationException(format.Name + " supports max " + format.MaxDimension + " pixels. Reduce the dimensions.");
+                    if (format.MagickFormat == MagickFormat.Jpeg) { frame.BackgroundColor = MagickColors.White; frame.Alpha(AlphaOption.Remove); }
+                    frame.Format = format.MagickFormat;
+                    frame.Write(Path.Combine(folder, "frame-" + (i + 1).ToString("D5") + format.PrimaryExtension));
+                }
+            }
+        }
+
+        private async Task CreateAnimationAsync()
+        {
+            OutputFormat format = SelectedFormat();
+            if (!format.AnimationCapable) { SetStatus("Choose GIF, WebP or MNG for an animation.", ColorYellow); return; }
+            var items = fileList.Items.Cast<ListViewItem>().ToArray();
+            if (items.Length < 2) { SetStatus("Add at least two still images to create an animation.", ColorYellow); return; }
+            if (items.Any(i => i.SubItems[1].Text != "Image")) { SetStatus("Use only still images for an animation. Remove PDFs and videos from Input.", ColorYellow); return; }
+            int delay;
+            if (!int.TryParse(delayBox.Text, out delay) || delay < 10 || delay > 60000)
+            { SetStatus("Frame time must be between 10 and 60000 milliseconds.", ColorYellow); delayBox.Focus(); return; }
+            string[] paths = items.Select(i => (string)i.Tag).ToArray();
+            string resize = BuildMagickResize(); bool loop = loopBox.Checked;
+            ToggleBusy(true); conversionCancel = new CancellationTokenSource();
+            CancellationToken token = conversionCancel.Token;
+            progressFill.Width = 0; progressLabel.Text = "Building...";
+            foreach (var item in items) item.SubItems[3].Text = "Building animation";
+            SetStatus("Creating animation from " + paths.Length + " images...", ColorMuted);
+            try
+            {
+                string saved = await Task.Run(() => CreateAnimationCore(paths, format, resize, delay, loop, token), token);
+                foreach (var item in items) item.SubItems[3].Text = "Done";
+                progressFill.Width = progressTrack.Width; progressLabel.Text = paths.Length + " frames";
+                SetStatus("Saved " + Path.GetFileName(saved) + " in Output.", ColorGreen);
+            }
+            catch (OperationCanceledException)
+            {
+                foreach (var item in items) item.SubItems[3].Text = "Canceled";
+                progressLabel.Text = "Canceled"; SetStatus("Animation canceled.", ColorYellow);
+            }
+            catch (Exception ex)
+            {
+                foreach (var item in items) item.SubItems[3].Text = "Error: " + ex.Message;
+                progressLabel.Text = "Failed"; SetStatus("Could not create animation: " + ex.Message, ColorRed);
+            }
+            finally
+            {
+                conversionCancel.Dispose(); conversionCancel = null; ToggleBusy(false);
+                if (closeWhenFinished) BeginInvoke(new Action(Close));
+            }
+        }
+
+        private string CreateAnimationCore(string[] paths, OutputFormat format, string resize, int delay, bool loop, CancellationToken token)
+        {
+            string target = AvailableOutputPath(Path.Combine(outputDir, "animation-conv" + format.PrimaryExtension));
+            string temporary = Path.Combine(outputDir, ".animation-" + Guid.NewGuid().ToString("N") + format.PrimaryExtension);
+            try
+            {
+                using (var frames = new MagickImageCollection())
+                {
+                    uint width = 0, height = 0;
+                    foreach (string path in paths)
+                    {
+                        token.ThrowIfCancellationRequested();
+                        using (var source = new MagickImageCollection(path))
+                        {
+                            if (source.Count != 1) throw new InvalidOperationException(Path.GetFileName(path) + " is not a still image. Extract its frames first.");
+                            var frame = source[0].Clone();
+                            frames.Add(frame);
+                            if (!string.IsNullOrEmpty(resize)) frame.Resize(new MagickGeometry(resize));
+                            frame.ResetPage();
+                            width = Math.Max(width, frame.Width); height = Math.Max(height, frame.Height);
+                        }
+                    }
+                    foreach (var frame in frames)
+                    {
+                        token.ThrowIfCancellationRequested();
+                        frame.BackgroundColor = MagickColors.Transparent;
+                        frame.Extent(width, height, Gravity.Center);
+                        frame.ResetPage();
+                        frame.AnimationTicksPerSecond = 100;
+                        frame.AnimationDelay = (uint)Math.Max(1, (delay + 5) / 10);
+                        frame.AnimationIterations = loop ? 0U : 1U;
+                        frame.GifDisposeMethod = GifDisposeMethod.Background;
+                        frame.Format = format.MagickFormat;
+                    }
+                    token.ThrowIfCancellationRequested();
+                    frames.Write(temporary);
+                    token.ThrowIfCancellationRequested();
+                }
+                File.Move(temporary, target);
+                return target;
+            }
+            finally { if (File.Exists(temporary)) File.Delete(temporary); }
         }
 
         private OutputFormat SelectedFormat()
@@ -1218,14 +1476,19 @@ namespace ImageConverterUtility
 
         private void ToggleBusy(bool busy)
         {
-            convertButton.Enabled = !busy;
+            isBusy = busy;
+            modeBox.Enabled = delayBox.Enabled = loopBox.Enabled = moveUpButton.Enabled = moveDownButton.Enabled = !busy;
+            outputFormatBox.Enabled = widthBox.Enabled = heightBox.Enabled = scaleBox.Enabled = !busy;
+            addButton.Enabled = !busy;
+            convertButton.Visible = !busy;
+            convertButton.Enabled = !busy && fileList.Items.Count > 0;
             refreshButton.Enabled = !busy;
             clearButton.Enabled = !busy;
             openInputButton.Enabled = !busy;
             openOutputButton.Enabled = !busy;
             cancelButton.Visible = busy;
             cancelButton.Enabled = busy;
-            Cursor = busy ? Cursors.WaitCursor : Cursors.Default;
+            Cursor = Cursors.Default;
         }
 
         private void SetStatus(string text, Color color)
@@ -1294,150 +1557,6 @@ namespace ImageConverterUtility
         [DllImport("user32.dll")]
         private static extern bool ShowScrollBar(IntPtr hWnd, int wBar, bool bShow);
 
-        private sealed class FormatPopup : Form
-        {
-            private const int FullVisibleRows = 13;
-            private const int HalfRowPixels = 10;
-            private readonly ComboBox owner;
-            private readonly List<OutputFormat> formats;
-            private readonly Font font;
-            private readonly int rowHeight;
-            private int scrollOffset;
-            private int hoverIndex = -1;
-
-            public event Action<int> ItemChosen;
-
-            public FormatPopup(ComboBox owner, List<OutputFormat> formats, Font font, int width)
-            {
-                this.owner = owner;
-                this.formats = formats;
-                this.font = font;
-                rowHeight = 20;
-
-                FormBorderStyle = FormBorderStyle.None;
-                ShowInTaskbar = false;
-                StartPosition = FormStartPosition.Manual;
-                BackColor = ColorPanel;
-                int visibleHeight = rowHeight * Math.Min(FullVisibleRows, formats.Count);
-                if (formats.Count > FullVisibleRows)
-                {
-                    visibleHeight += HalfRowPixels;
-                }
-                Size = new System.Drawing.Size(width, visibleHeight + 2);
-                DoubleBuffered = true;
-                SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
-                UpdateStyles();
-            }
-
-            protected override void OnShown(EventArgs e)
-            {
-                base.OnShown(e);
-                scrollOffset = 0;
-                hoverIndex = owner.SelectedIndex >= 0 && owner.SelectedIndex < FullVisibleRows ? owner.SelectedIndex : -1;
-                Invalidate();
-                Activate();
-            }
-
-            protected override void OnPaintBackground(PaintEventArgs e)
-            {
-            }
-
-            protected override void OnDeactivate(EventArgs e)
-            {
-                Close();
-                base.OnDeactivate(e);
-            }
-
-            protected override void OnMouseWheel(MouseEventArgs e)
-            {
-                int direction = e.Delta < 0 ? 1 : -1;
-                int maxOffset = Math.Max(0, TotalContentHeight() - (Height - 2));
-                scrollOffset = Math.Max(0, Math.Min(maxOffset, scrollOffset + direction * rowHeight));
-                UpdateHover(e.Location);
-                Invalidate();
-                base.OnMouseWheel(e);
-            }
-
-            protected override void OnMouseMove(MouseEventArgs e)
-            {
-                UpdateHover(e.Location);
-                Invalidate();
-                base.OnMouseMove(e);
-            }
-
-            protected override void OnMouseLeave(EventArgs e)
-            {
-                hoverIndex = -1;
-                Invalidate();
-                base.OnMouseLeave(e);
-            }
-
-            protected override void OnMouseDown(MouseEventArgs e)
-            {
-                int index = IndexAtOffset(e.Y - 1 + scrollOffset);
-                if (index >= 0 && index < formats.Count)
-                {
-                    if (ItemChosen != null) ItemChosen(index);
-                    Close();
-                }
-                base.OnMouseDown(e);
-            }
-
-            protected override void OnPaint(PaintEventArgs e)
-            {
-                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-                using (SolidBrush bg = new SolidBrush(ColorPanel))
-                using (Pen border = new Pen(ColorAccent))
-                {
-                    e.Graphics.FillRectangle(bg, ClientRectangle);
-                    e.Graphics.DrawRectangle(border, 0, 0, Width - 1, Height - 1);
-                }
-
-                int firstIndex = IndexAtOffset(scrollOffset);
-                int top = 1 - (scrollOffset - OffsetForIndex(firstIndex));
-                for (int index = firstIndex; index < formats.Count; index++)
-                {
-                    OutputFormat format = formats[index];
-                    Rectangle bounds = new Rectangle(1, top, Width - 2, rowHeight);
-                    if (bounds.Bottom <= 1 || bounds.Top >= Height - 1) continue;
-                    bool selected = index == owner.SelectedIndex;
-                    bool hover = index == hoverIndex;
-                    Color bg = selected ? ColorAccent : (hover ? Blend(ColorPanel, ColorAccent, 0.22f) : ColorPanel);
-                    Color fg = selected ? Color.White : ColorText;
-                    using (SolidBrush fill = new SolidBrush(bg))
-                    {
-                        e.Graphics.FillRectangle(fill, bounds);
-                    }
-                    Rectangle textBounds = new Rectangle(bounds.X + 6, bounds.Y, bounds.Width - 10, bounds.Height);
-                    TextRenderer.DrawText(e.Graphics, format.ToString(), font, textBounds, fg, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
-                    top += rowHeight;
-                    if (top >= Height - 1) break;
-                }
-            }
-
-            private void UpdateHover(System.Drawing.Point point)
-            {
-                int index = IndexAtOffset(point.Y - 1 + scrollOffset);
-                hoverIndex = point.Y > 0 && point.Y < Height - 1 && index >= 0 && index < formats.Count ? index : -1;
-            }
-
-            private int TotalContentHeight()
-            {
-                return formats.Count * rowHeight;
-            }
-
-            private int OffsetForIndex(int index)
-            {
-                return Math.Max(0, Math.Min(index, formats.Count)) * rowHeight;
-            }
-
-            private int IndexAtOffset(double offset)
-            {
-                if (formats.Count == 0) return -1;
-                int index = (int)Math.Floor(offset / rowHeight);
-                return Math.Max(0, Math.Min(formats.Count - 1, index));
-            }
-        }
     }
 
     internal sealed class VideoFrameReader : IDisposable
@@ -1593,8 +1712,91 @@ namespace ImageConverterUtility
         }
     }
 
+    internal static class ScrollbarTheme
+    {
+        public static void Initialize()
+        {
+            // Match the application's dark surfaces even when Windows uses a light theme.
+            try { SetPreferredAppMode(2); FlushMenuThemes(); }
+            catch (EntryPointNotFoundException) { }
+        }
+        public static void Apply(IntPtr handle)
+        {
+            if (handle == IntPtr.Zero) return;
+            try { AllowDarkModeForWindow(handle, true); }
+            catch (EntryPointNotFoundException) { }
+            SetWindowTheme(handle, "DarkMode_Explorer", null);
+        }
+        public static void ApplyComboList(IntPtr handle)
+        {
+            ComboInfo info = new ComboInfo(); info.Size = Marshal.SizeOf(typeof(ComboInfo));
+            if (GetComboBoxInfo(handle, ref info)) Apply(info.List);
+        }
+        [StructLayout(LayoutKind.Sequential)]
+        private struct ComboInfo
+        {
+            public int Size;
+            public Rectangle Item, Button;
+            public int State;
+            public IntPtr Combo, Edit, List;
+        }
+        [DllImport("uxtheme.dll", EntryPoint = "#135")]
+        private static extern int SetPreferredAppMode(int mode);
+        [DllImport("uxtheme.dll", EntryPoint = "#136")]
+        private static extern void FlushMenuThemes();
+        [DllImport("uxtheme.dll", EntryPoint = "#133")]
+        private static extern bool AllowDarkModeForWindow(IntPtr handle, bool allow);
+        [DllImport("uxtheme.dll", CharSet = CharSet.Unicode)]
+        private static extern int SetWindowTheme(IntPtr handle, string theme, string list);
+        [DllImport("user32.dll")]
+        private static extern bool GetComboBoxInfo(IntPtr handle, ref ComboInfo info);
+    }
+
+    internal sealed class DarkComboBox : ComboBox
+    {
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            ScrollbarTheme.Apply(Handle);
+            ScrollbarTheme.ApplyComboList(Handle);
+        }
+        protected override void OnDropDown(EventArgs e)
+        {
+            ScrollbarTheme.ApplyComboList(Handle);
+            base.OnDropDown(e);
+        }
+        protected override void WndProc(ref Message m)
+        {
+            base.WndProc(ref m);
+            if (m.Msg == 0xF || m.Msg == 0x318 || m.Msg == 0x317)
+            using (Graphics g = m.Msg == 0xF ? Graphics.FromHwnd(Handle) : Graphics.FromHdc(m.WParam))
+            using (SolidBrush fill = new SolidBrush(BackColor))
+            using (Pen border = new Pen(Focused ? Color.FromArgb(124, 108, 245) : BackColor))
+            using (Pen arrow = new Pen(ForeColor, 1.5f))
+            {
+                g.FillRectangle(fill, ClientRectangle);
+                g.DrawRectangle(border, 0, 0, Width - 1, Height - 1);
+                TextRenderer.DrawText(g, Text, Font, new Rectangle(10, 0, Width - 36, Height),
+                    Enabled ? ForeColor : SystemColors.GrayText, TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+                int x = Width - 17, y = Height / 2;
+                g.DrawLines(arrow, new[] { new System.Drawing.Point(x - 4, y - 2), new System.Drawing.Point(x, y + 2), new System.Drawing.Point(x + 4, y - 2) });
+            }
+        }
+    }
+
+    internal sealed class BufferedListView : ListView
+    {
+        public BufferedListView() { DoubleBuffered = true; }
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            ScrollbarTheme.Apply(Handle);
+        }
+    }
+
     internal sealed class StyledButton : Button
     {
+        public bool Primary { get; set; }
         private readonly Color accent;
         private bool pressed;
         private bool hovered;
@@ -1607,7 +1809,7 @@ namespace ImageConverterUtility
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
             FlatStyle = FlatStyle.Flat;
             FlatAppearance.BorderSize = 0;
-            BackColor = Color.FromArgb(25, 25, 25);
+            BackColor = Color.FromArgb(17, 18, 22);
             ForeColor = accent;
             Cursor = Cursors.Hand;
             TabStop = true;
@@ -1645,10 +1847,11 @@ namespace ImageConverterUtility
         protected override void OnPaint(PaintEventArgs pevent)
         {
             pevent.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            pevent.Graphics.Clear(Color.FromArgb(25, 25, 25));
-            Color bg = Color.FromArgb(25, 25, 25);
-            Color border = Enabled ? accent : Color.FromArgb(72, 72, 72);
-            Color fg = Enabled ? accent : Color.FromArgb(100, 100, 100);
+            pevent.Graphics.Clear(BackColor);
+            Color bg = Color.FromArgb(17, 18, 22);
+            bg = Primary && Enabled ? accent : Color.FromArgb(35, 37, 46);
+            Color border = Enabled ? (Primary ? accent : Color.FromArgb(53, 55, 67)) : Color.FromArgb(45, 47, 55);
+            Color fg = Enabled ? Color.FromArgb(235, 240, 249) : Color.FromArgb(100, 100, 110);
             if (hovered && Enabled)
             {
                 bg = Blend(bg, accent, 0.08f);
@@ -1669,7 +1872,8 @@ namespace ImageConverterUtility
                 pevent.Graphics.DrawPath(pen, path);
             }
 
-            TextRenderer.DrawText(pevent.Graphics, Text, Font, rect, fg, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+            if (Focused && ShowFocusCues) ControlPaint.DrawFocusRectangle(pevent.Graphics, new Rectangle(5, 5, Width - 10, Height - 10), fg, bg);
+            TextRenderer.DrawText(pevent.Graphics, Text, Font, rect, fg, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
         }
 
         private static GraphicsPath RoundedRect(Rectangle bounds, int radius)
